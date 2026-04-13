@@ -1,18 +1,20 @@
 from .schemas import (
     Provider,
-    FunctionCall,
     ToolCall,
+    Event,
     Message,
     TokenUsage,
-    LLMResponse
+    LLMResponse,
+    RawResponseLike
 )
 
 
 __all__ = [
     'Provider',
-    'FunctionCall',
     'ToolCall',
+    'Event',
     'Message',
     'TokenUsage',
-    'LLMResponse'
+    'LLMResponse',
+    'RawResponseLike'
 ]

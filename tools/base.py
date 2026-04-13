@@ -6,11 +6,12 @@ from typing import Any, Callable, Literal
 class ToolResult(BaseModel):
     """ 记录工具的执行结果 """
 
+    id: str
+    name: str
     success: bool
     content: str = ''
     error: str | None = None
 
-ToolType = Literal['function', 'coding']
 
 class BaseTool(BaseModel):
     """ 工具基类，创建工具时应继承该基类 """
@@ -19,7 +20,7 @@ class BaseTool(BaseModel):
     parameters: BaseModel
 
     #工具的类型
-    type: ToolType = 'function'
+    type: Literal['function', 'coding'] = 'function'
 
     # 工具的名字
     @property
