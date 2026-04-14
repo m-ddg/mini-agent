@@ -28,6 +28,17 @@ class OpenAIResponsesClient(BaseLLMClient):
             api_key=api_key,
             base_url=base_url,
         )
+        self.cached_input_items = []
+        self.idx = 0
+
+
+    def _convert_events(self, events: list[Event]) -> list[dict[str, Any]]:
+        new_events = events[self.idx:]
+
+
+
+
+    def _convert_tools(self, tools: list[BaseTool]) -> list[dict[str, Any]]:
 
 
     def _parse_finsih_reason(self, response: RawResponseLike) -> str:
@@ -64,7 +75,7 @@ class OpenAIResponsesClient(BaseLLMClient):
 
         output_items = response.output
         # 存储本次调用所产生的所有事件
-        current_events = []
+        output_events = []
 
         for item in output_items:
             match item.type:
@@ -74,10 +85,10 @@ class OpenAIResponsesClient(BaseLLMClient):
                         if part.type == "output_text":
                             total_text += part.text
                     text_event = Event(
-                        type="message",
-                        text=total_text,
+                        type="llm_text",
+                        llm_text=total_text,
                     )
-                    current_events.append(text_event)
+                    output_events.append(text_event)
 
                 case "reasoning":
                     thinking = ''
@@ -87,7 +98,7 @@ class OpenAIResponsesClient(BaseLLMClient):
                         type="reasoning",
                         thinking=thinking
                     )
-                    current_events.append(reasoning_event)
+                    output_events.append(reasoning_event)
 
                 case "function_call":
                     raw_args = item.arguments
@@ -105,11 +116,11 @@ class OpenAIResponsesClient(BaseLLMClient):
                         type="function_call",
                         tool_call=tc
                     )
-                    current_events.append(tc_event)
+                    output_events.append(tc_event)
 
         current_message = Message(
             role="assistant",
-            content=current_events,
+            content=output_events,
         )
 
         token_usage = TokenUsage(

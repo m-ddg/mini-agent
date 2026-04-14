@@ -4,12 +4,18 @@ import json
 
 max_step = 50
 messages = []
+tools = []
 step = 0
+
+user_input = input("聊些什么呢？")
+user_message = Message(role='user', content=user_input)
+messages.append(user_message)
 
 def convert_message(
         self,
         messages: list[Message]
-) -> tuple[str | None, list[dict[str, Any]]]:
+) -> tuple[Optional[str], list[Event]]:
+
     if not messages:
         raise ValueError('messages不能为空')
 
@@ -22,44 +28,45 @@ def convert_message(
                 system_prompt = msg.content
 
             case 'user':
-                temp_user_dict = {
-                    "role": "user",
-                    "content": msg.content
-                }
-                input_events.append(temp_user_dict)
+                user_event = Event(
+                    type="user_text",
+                    user_text=msg.content
+                )
+                input_events.append(user_event)
 
             case 'assistant':
                 for event in msg.content:
-                    if event.type == "message":
-                        text_dict = {
-                            "role": "assistant",
-                            "content": event.text
-                        }
-                        input_events.append(text_dict)
-                    elif event.type == "function_call":
-                        function_call_dict = {
-                            "call_id": event.tool_call.id,
-                            "type": "function_call",
-                            "name": event.tool_call.name,
-                            "arguments": json.dumps(event.tool_call.arguments)
-                        }
-                        input_events.append(function_call_dict)
+                    if event.type != "reasoning":
+                        input_events.append(event)
 
             case "tool":
                 for event in msg.content:
-                    if event.type == "function_call_output":
-                        function_call_output_dict = {
-                            "type": "function_call_output",
-                            "call_id": event.tool_result.id,
-                            "output": event.tool_result.content
-                        }
-                        input_events.append(function_call_output_dict)
+                    input_events.append(event)
 
     return system_prompt, input_events
+
 while step < max_step:
-    mission_events = []
+
+    task_events = []
     system_prompt, input_events = convert_message(messages)
-    mission_events += input_events
+    task_events += input_events
+
+    response = client.generate(
+        system_prompt = system_prompt,
+        input_events = input_events,
+        tools = tools
+    )
+
+    output_message = response.message
+    output_events = output_message.content
+
+    messages.append(output_message)
+
+    for event in output_events:
+        if event.type != "reasoning":
+            task_events.append(event)
+
+    step += 1
 
 
 

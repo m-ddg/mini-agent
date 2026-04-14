@@ -23,11 +23,12 @@ class ToolCall(BaseModel):
 class Event(BaseModel):
     """ 用于适配事件驱动的responses api LLM调用 """
 
-    type: Literal["message", "reasoning", "function_call", "function_call_output"]
-    text: str | None = None  # 当事件类型为message时，该属性记录LLM返回的文字
-    thinking: str | None = None  # 当事件类型为reasoning时，该属性记录LLM的推理内容
-    tool_call: ToolCall | None = None  # 当事件类型为function_call时，该属性记录LLM的工具调用
-    tool_result: ToolResult | None = None
+    type: Literal["user_text", "llm_text", "reasoning", "function_call", "function_output"]
+    user_text: Optional[str] = None  # 记录用户的输入
+    llm_text: Optional[str] = None  # 记录llm的文字输出
+    thinking: Optional[str] = None  # 当事件类型为reasoning时，该属性记录LLM的推理内容
+    tool_call: Optional[ToolCall] = None  # 当事件类型为function_call时，该属性记录LLM的工具调用
+    tool_result: Optional[ToolResult] = None
 
 class Message(BaseModel):
     """ 框架内消息结构 """
