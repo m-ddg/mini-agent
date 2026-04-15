@@ -6,13 +6,13 @@ from typing import Any, Literal, Optional
 import os
 from dotenv import load_dotenv
 from openai import AsyncClient
+import copy
 
 load_dotenv()
 
 
 class OpenAIResponsesClient(BaseLLMClient):
     """ 处理responses api格式的OpenAI适配客户端 """
-
 
     def __init__(
             self,
@@ -28,17 +28,60 @@ class OpenAIResponsesClient(BaseLLMClient):
             api_key=api_key,
             base_url=base_url,
         )
-        self.cached_input_items = []
-        self.idx = 0
+        self._cached_input_items = []
+        self._idx = 0
 
 
     def _convert_events(self, events: list[Event]) -> list[dict[str, Any]]:
-        new_events = events[self.idx:]
+        """ 转换events为responses api格式的输入，并且每次都只对新增的events做转换 """
 
+        new_events = events[self._idx:]
 
+        for event in new_events:
+            match event.type:
+                case "user_text":
+                    self.cached_input_items.append({
+                        "role": "user",
+                        "content": event.user_text
+                    })
+
+                case "llm_text":
+                    self.cached_input_items.append({
+                        "role": "assistant",
+                        "content": event.llm_text
+                    })
+
+                case "function_call":
+                    tc = event.tool_call
+                    function_call_json = {
+                        "arguments": json.dumps(tc.arguments),
+                        "call_id": tc.id,
+                        "name": tc.name,
+                        "type": "function_call"
+                    }
+                    self.cached_input_items.append(function_call_json)
+
+                case "function_output":
+                    tr = event.tool_result
+                    function_output_json = {
+                        "call_id": tr.id,
+                        "output": tr.content,
+                        "type": "function_call_output"
+                    }
+                    self.cached_input_items.append(function_output_json)
+
+        self._idx = len(events)
+        return copy.deepcopy(self._cached_input_items)
 
 
     def _convert_tools(self, tools: list[BaseTool]) -> list[dict[str, Any]]:
+        """ 调用工具的to_schema方法获取responses api格式下的函数定义json """
+
+        tools_definitions = []
+        for tool in tools:
+            tools_definitions.append(tool.to_openai_responses_format())
+
+        return tools_definitions
 
 
     def _parse_finsih_reason(self, response: RawResponseLike) -> str:

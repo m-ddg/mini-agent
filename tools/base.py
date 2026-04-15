@@ -46,14 +46,15 @@ class BaseTool(BaseModel):
         return json_data
 
 
-    def to_openai_response_format(self) -> dict[str, Any]:
+    def to_openai_responses_format(self) -> dict[str, Any]:
         """ 将工具转为OpenAI的response api的定义格式 """
         param_dict = self.clean_schema(self.parameters.model_json_schema())
         return {
             'name': self.name,
             'description': self.description,
             'type': self.type,
-            'parameters': param_dict
+            'parameters': param_dict,
+            'strict': True
         }
 
     def to_openai_chat_format(self) -> dict[str, Any]:
