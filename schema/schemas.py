@@ -56,6 +56,9 @@ class LLMResponse(BaseModel):
 
 
 class RawResponseLike(Protocol):
+    """ LLM的原始返回应该包含的字段（部分） """
+
     status: str
     output: list[Any]
     incomplete_details: Optional[Any]
+    usage: Optional[Any]

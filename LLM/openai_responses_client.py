@@ -6,7 +6,6 @@ from typing import Any, Literal, Optional
 import os
 from dotenv import load_dotenv
 from openai import AsyncClient
-import copy
 
 load_dotenv()
 
@@ -30,9 +29,10 @@ class OpenAIResponsesClient(BaseLLMClient):
         )
         self._cached_input_items = []
         self._idx = 0
+        self.finish = False
 
 
-    def _convert_events(self, events: list[Event]) -> list[dict[str, Any]]:
+    def _convert_events(self, events: list[Event]) -> tuple[dict[str, Any]]:
         """ 转换events为responses api格式的输入，并且每次都只对新增的events做转换 """
 
         new_events = events[self._idx:]
@@ -40,13 +40,13 @@ class OpenAIResponsesClient(BaseLLMClient):
         for event in new_events:
             match event.type:
                 case "user_text":
-                    self.cached_input_items.append({
+                    self._cached_input_items.append({
                         "role": "user",
                         "content": event.user_text
                     })
 
                 case "llm_text":
-                    self.cached_input_items.append({
+                    self._cached_input_items.append({
                         "role": "assistant",
                         "content": event.llm_text
                     })
@@ -59,7 +59,7 @@ class OpenAIResponsesClient(BaseLLMClient):
                         "name": tc.name,
                         "type": "function_call"
                     }
-                    self.cached_input_items.append(function_call_json)
+                    self._cached_input_items.append(function_call_json)
 
                 case "function_output":
                     tr = event.tool_result
@@ -68,10 +68,15 @@ class OpenAIResponsesClient(BaseLLMClient):
                         "output": tr.content,
                         "type": "function_call_output"
                     }
-                    self.cached_input_items.append(function_output_json)
+                    self._cached_input_items.append(function_output_json)
 
         self._idx = len(events)
-        return copy.deepcopy(self._cached_input_items)
+        # 返回元组防止意外修改私有属性
+        return tuple(self._cached_input_items)
+
+    def _clear_cache(self):
+        self._cached_input_items = []
+        self._idx = 0
 
 
     def _convert_tools(self, tools: list[BaseTool]) -> list[dict[str, Any]]:
@@ -87,20 +92,20 @@ class OpenAIResponsesClient(BaseLLMClient):
     def _parse_finsih_reason(self, response: RawResponseLike) -> str:
         """ 从返回体解析出LLM调用结束的原因 """
 
-        if any (item.type == "funciton_call" for item in response.output):
-            return "Funciton call"
+        if any (item.type == "function_call" for item in response.output):
+            return "Function call"
         match response.status:
             case "failed":
                 return "请求整体失败。"
             case "cancelled":
                 return "请求被取消"
-            case "in_porgress":
+            case "in_progress":
                 return "流式处理中"
             case "queued":
                 return "排队等待中"
             case "incomplete":
                 reason_prefix = "返回被截断"
-                reason = response.incomplete_deatils.reason
+                reason = response.incomplete_details.reason
                 if reason == "max_output_tokens":
                     return reason_prefix + "，超出最大输出token限制"
                 elif reason == "content_filter":
@@ -160,6 +165,12 @@ class OpenAIResponsesClient(BaseLLMClient):
                         tool_call=tc
                     )
                     output_events.append(tc_event)
+                    if item.name == "Task Finish":
+                        self.finish = True
+                        break
+
+        if self.finish:
+            self._clear_cache()
 
         current_message = Message(
             role="assistant",
@@ -182,11 +193,47 @@ class OpenAIResponsesClient(BaseLLMClient):
 
         return result
 
-    def _make_api_call(
+    async def _make_api_request(
             self,
+            system_prompt: str,
             input_items: list[dict[str, Any]],
             tools: Optional[list[Any]]
     ) -> RawResponseLike:
+        """ 调用LLM """
+
+        input_params = {
+            "model": self.model,
+            "instructions": system_prompt,
+            "input": input_items,
+            "tools": tools
+        }
+        response = await self.client.responses.create(**input_params)
+
+        return response
+
+    async def generate(
+            self,
+            system_prompt: str,
+            events: list[Event],
+            tools: Optional[list[BaseTool]] = None
+    ) -> LLMResponse:
+        """ client调用LLM的入口 """
+
+        input_items = self._convert_events(events)
+        input_items = list(input_items)
+        tools_definitions = self._convert_tools(tools)
+
+        response = await self._make_api_request(
+            system_prompt = system_prompt,
+            input_items = input_items,
+            tools = tools_definitions
+        )
+        llm_response = self._parse_response(response)
+
+        return llm_response
+
+
+
 
 
 

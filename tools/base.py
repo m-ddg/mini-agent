@@ -1,6 +1,7 @@
 import inspect
 from pydantic import BaseModel, create_model
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Optional
+from ..schema import ToolCall
 
 
 class ToolResult(BaseModel):
@@ -17,7 +18,7 @@ class BaseTool(BaseModel):
     """ 工具基类，创建工具时应继承该基类 """
 
     # 工具的参数
-    parameters: BaseModel
+    parameters: Optional[type[BaseModel]]
 
     #工具的类型
     type: Literal['function', 'coding'] = 'function'
@@ -32,7 +33,7 @@ class BaseTool(BaseModel):
     def description(self) -> str:
         raise NotImplementedError
 
-    async def execute(self, *args, **kwargs) -> ToolResult:
+    async def execute(self, tool_call: ToolCall, *args, **kwargs) -> ToolResult:
         """ 执行工具 """
         raise NotImplementedError
 

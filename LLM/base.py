@@ -18,11 +18,6 @@ class BaseLLMClient(ABC):
 
 
     @abstractmethod
-    def generate(
-            self,
-            messages: list[Message],
-            tools: list[Any] | None = None,
-            model: str | None = None
-    ) -> LLMResponse:
+    def generate(self, *args, **kwargs) -> LLMResponse:
         """ 调用LLM """
         pass
