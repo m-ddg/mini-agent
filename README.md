@@ -28,4 +28,4 @@
 - 纠结是否应该有prepare函数？event转换函数和工具转换函数是否要塞进prepare做一层额外封装？以及两个convert函数/prepare函数是放在make函数之前形成串行结构，还是放在make函数内？
 最终决定不写prepare函数，两个convert函数放在make函数前。
 
-- 为了适配现在的reponses api client，决定砍掉BaseLLMClient基类除generate函数外的所有约束，格式的转换留给子类实现。不得不说，这个提议既大胆又合理。
+- 为了适配现在的reponses api client，决定砍掉BaseLLMClient基类除generate函数外的所有约束，格式的转换留给子类实现。
