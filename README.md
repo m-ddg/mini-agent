@@ -1,5 +1,5 @@
 # mini-agent-
-一个简易的agent框架，很大程度上参考了MiniMax的Mini-Agent框架https://github.com/MiniMax-AI/Mini-Agent
+一个简易的agent框架，部分参考了MiniMax的Mini-Agent框架https://github.com/MiniMax-AI/Mini-Agent
 
 2026/04/13
 - 新增了RawResponseLike类用于抽象responses api格式下返回体的协议

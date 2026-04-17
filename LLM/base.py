@@ -18,6 +18,6 @@ class BaseLLMClient(ABC):
 
 
     @abstractmethod
-    def generate(self, *args, **kwargs) -> LLMResponse:
+    async def generate(self, *args, **kwargs) -> LLMResponse:
         """ 调用LLM """
         pass

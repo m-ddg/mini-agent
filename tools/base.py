@@ -33,7 +33,7 @@ class BaseTool(BaseModel):
     def description(self) -> str:
         raise NotImplementedError
 
-    async def execute(self, tool_call: ToolCall, *args, **kwargs) -> ToolResult:
+    async def execute(self, tool_call: Optional[ToolCall] = None, *args, **kwargs) -> ToolResult:
         """ 执行工具 """
         raise NotImplementedError
 
