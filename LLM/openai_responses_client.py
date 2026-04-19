@@ -20,7 +20,7 @@ class OpenAIResponsesClient(BaseLLMClient):
             model: Literal['gpt-4o', 'gpt-4o-mini'] | None = "gpt-4o"
     ):
         api_key = api_key or os.getenv('OPENAI_API_KEY')
-        base_url = base_url or os.getenv('OPENAI_API_URL', "https://openai.com/api/v3/")
+        base_url = base_url or os.getenv('OPENAI_API_URL', "https://openai.com/v1")
         model = model or "gpt-4o"
         super().__init__(api_key, base_url, model)
         self.client = AsyncClient(
@@ -29,7 +29,7 @@ class OpenAIResponsesClient(BaseLLMClient):
         )
         self._cached_input_items = []
         self._idx = 0
-        self.finish = False
+        self._finish = False
 
 
     def _convert_events(self, events: list[Event]) -> tuple[dict[str, Any]]:
@@ -77,10 +77,14 @@ class OpenAIResponsesClient(BaseLLMClient):
     def _clear_cache(self):
         self._cached_input_items = []
         self._idx = 0
+        self._finish = False
 
 
-    def _convert_tools(self, tools: list[BaseTool]) -> list[dict[str, Any]]:
+    def _convert_tools(self, tools: Optional[BaseTool]) -> Optional[list[dict[str, Any]]]:
         """ 调用工具的to_schema方法获取responses api格式下的函数定义json """
+
+        if not tools:
+            return None
 
         tools_definitions = []
         for tool in tools:
@@ -89,7 +93,7 @@ class OpenAIResponsesClient(BaseLLMClient):
         return tools_definitions
 
 
-    def _parse_finsih_reason(self, response: RawResponseLike) -> str:
+    def _parse_finish_reason(self, response: RawResponseLike) -> str:
         """ 从返回体解析出LLM调用结束的原因 """
 
         if any (item.type == "function_call" for item in response.output):
@@ -151,7 +155,7 @@ class OpenAIResponsesClient(BaseLLMClient):
                 case "function_call":
                     raw_args = item.arguments
                     try:
-                        args = json.load(raw_args) if isinstance(raw_args, str) else raw_args
+                        args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
                     except json.JSONDecodeError:
                         args = {}
                     tc = ToolCall(
@@ -169,7 +173,7 @@ class OpenAIResponsesClient(BaseLLMClient):
                         self.finish = True
                         break
 
-        if self.finish:
+        if self._finish:
             self._clear_cache()
 
         current_message = Message(
@@ -183,7 +187,7 @@ class OpenAIResponsesClient(BaseLLMClient):
             total_tokens=response.usage.total_tokens,
         )
 
-        finish_reason = self._parse_finsih_reason(response)
+        finish_reason = self._parse_finish_reason(response)
 
         result = LLMResponse(
             message=current_message,

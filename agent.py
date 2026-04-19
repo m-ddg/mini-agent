@@ -25,16 +25,22 @@ class Agent:
         self._client = llmclient or create_llm_client(provider)
         self.max_step = max_step
         self.token_limit = token_limit
-        self.system_prompt = self._get_system_prompt(system_prompt)
+        self._system_prompt = self._get_system_prompt(system_prompt)
         self.messages = []
         self.tools = tools
         self.tool_dict = {tool.name: tool for tool in tools} if tools else {}
         self.task_type = task_type
         self._should_summary: bool = False
 
-        self.messages.append(
-            Message(role="system", content=self.system_prompt)
-        )
+
+    @property
+    def system_prompt(self):
+        return self._system_prompt
+
+    @system_prompt.setter
+    def system_prompt(self, value):
+        self._system_prompt = value
+
 
 
     def _get_system_prompt(self, system_prompt: Optional[str] = None) -> str:
@@ -42,10 +48,6 @@ class Agent:
 
         if system_prompt:
             return system_prompt
-
-        system_or_not = input("如需配置系统提示词，请输入；或者输入N以表示使用默认提示词")
-        if system_or_not.upper() != "N":
-            return system_or_not
 
         system_prompt_path = Path("mini_agent/config/system_prompt.md")
         if system_prompt_path.read_text(encoding="utf-8"):
@@ -77,7 +79,7 @@ class Agent:
 
 
 
-    async def convert_message(
+    def convert_message(
             self,
             messages: list[Message]
     ) ->  list[Event]:
@@ -108,24 +110,25 @@ class Agent:
 
         return input_events
 
-    async def run(self, messages: list[Message]) -> None:
+    async def run(self, messages: list[Message], system_prompt: Optional[str] = None) -> None:
         """ 运行单次任务（用户输入） """
 
         step = 0
         task_events = []
-        input_events = await self.convert_message(messages)
+        input_events = self.convert_message(messages)
         task_events += input_events
         finish = False
 
         while step < self.max_step:
 
             response = await self._client.generate(
-                system_prompt = self.system_prompt,
+                system_prompt = system_prompt or self._system_prompt,
                 input_events = task_events,
                 tools = self.tools
             )
 
             output_message = response.message
+            messages.apppend(output_message)
             output_events = output_message.content
 
             tool_call_list = []

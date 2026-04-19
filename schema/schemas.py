@@ -37,6 +37,7 @@ class Message(BaseModel):
     # 当role为system/user时，content是消息文本。
     # 用于responses api client时，当role为assistant或tool时，content是存储有事件的列表
     content: str | list[Event]
+    turn_count: int = 0
 
 
 class TokenUsage(BaseModel):
