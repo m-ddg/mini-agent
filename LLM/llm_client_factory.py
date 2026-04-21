@@ -1,10 +1,12 @@
-from . import BaseLLMClient, openai_responses_client
+from . import BaseLLMClient, OpenAIResponsesClient
 from .. schema import Provider
 
 def create_llm_client(provider: str) -> BaseLLMClient:
-    upper_provider = provider.upper()
-    llm_providr = Provider.upper_provider
+    """ 返回对应产商client的工厂函数 """
 
-    match llm_providr:
+    upper_provider = provider.upper()
+    llm_provider = Provider.upper_provider
+
+    match llm_provider:
         case "openai":
-            return openai_responses_client()
+            return OpenAIResponsesClient()

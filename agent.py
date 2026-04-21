@@ -31,6 +31,7 @@ class Agent:
         self.tool_dict = {tool.name: tool for tool in tools} if tools else {}
         self.task_type = task_type
         self._should_summary: bool = False
+        self.task_count = 0
 
 
     @property
@@ -50,12 +51,11 @@ class Agent:
             return system_prompt
 
         system_prompt_path = Path("mini_agent/config/system_prompt.md")
-        if system_prompt_path.read_text(encoding="utf-8"):
+        if system_prompt_path.exists():
             system_prompt = system_prompt_path.read_text(encoding="utf-8")
             return system_prompt
-        else:
-            system_prompt = "You are a helpful AI assistant that can use tools."
-            return system_prompt
+
+        return "You are a helpful AI assistant that can use tools."
 
 
     def build_user_message(self) -> None:
@@ -75,7 +75,6 @@ class Agent:
                 text_need_summary = ''
                 for msg in self.messages:
                     pass
-
 
 
 
@@ -110,9 +109,11 @@ class Agent:
 
         return input_events
 
+
     async def run(self, messages: list[Message], system_prompt: Optional[str] = None) -> None:
         """ 运行单次任务（用户输入） """
 
+        self.task_count += 1
         step = 0
         task_events = []
         input_events = self.convert_message(messages)
@@ -128,9 +129,10 @@ class Agent:
             )
 
             output_message = response.message
-            messages.apppend(output_message)
-            output_events = output_message.content
+            output_message.task_count = self.task_count
+            messages.append(output_message)
 
+            output_events = output_message.content
             tool_call_list = []
 
             for event in output_events:
@@ -158,7 +160,7 @@ class Agent:
             tool_result_events = []
             for tc in tool_call_list:
                 tool = self.tool_dict.get(tc.name)
-                tr = tool.execute(tc)
+                tr = await tool.execute(tc)
                 tool_result_event = Event(
                     type = "function_output",
                     tool_result = tr
@@ -168,7 +170,8 @@ class Agent:
             task_events.extend(tool_result_events)
             tool_message = Message(
                 role = "tool",
-                content = tool_result_events
+                content = tool_result_events,
+                task_count = self.task_count
             )
             messages.append(tool_message)
 
