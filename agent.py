@@ -25,6 +25,7 @@ class Agent:
         self._client = llmclient or create_llm_client(provider)
         self.max_step = max_step
         self.token_limit = token_limit
+        self.messages_limit = 100
         self._system_prompt = self._get_system_prompt(system_prompt)
         self.messages = []
         self.tools = tools
@@ -74,7 +75,33 @@ class Agent:
             try:
                 text_need_summary = ''
                 for msg in self.messages:
-                    pass
+                    match msg.role:
+                        case 'user':
+                            text_need_summary += f"用户：{msg.content}\n"
+
+                        case 'assistant':
+                            for event in msg.content:
+                                if event.type == 'llm_text':
+                                    text_need_summary += f"llm:{event.llm_text}\n"
+                                elif event.type == 'function_call':
+                                    text_need_summary += f"llm:调用工具{event.tool_call.name}\n"
+
+                        case 'tool':
+                            for event in msg.content:
+                                text_need_summary += (f"工具{event.tool_result.name}执行结果："
+                                                      f"{event.tool_result.content}\n")
+
+                summary_prompt = f"""
+请你对以下的用户与大模型的交互过程进行总结，并在总结时遵循以下规则：
+1. **请不要过度缩略用户的输入**
+2. 请主要对llm的输出做总结，总结结果请保留要点
+下面是待被总结的交互过程
+{text_need_summary}                
+"""
+
+
+            except:
+
 
 
 
