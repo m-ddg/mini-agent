@@ -1,7 +1,7 @@
 from .schema import Message, Event
 from .LLM import BaseLLMClient,create_llm_client
 from .tools import BaseTool
-from typing import Any, Optional
+from typing import Any, Optional, Annotated
 from pathlib import Path
 
 
@@ -32,6 +32,7 @@ class Agent:
         self.tool_dict = {tool.name: tool for tool in tools} if tools else {}
         self.task_type = task_type
         self._should_summary: bool = False
+        self.no_summary_limit: Annotated[int, "不参与摘要压缩的任务消息数量"] = 3
         self.task_count = 0
 
 
@@ -72,24 +73,30 @@ class Agent:
         """ 压缩/摘要函数 """
 
         if self._should_summary:
+            summary_boundry = self.task_count - self.no_summary_limit
+
+            saved_messages = []
             try:
                 text_need_summary = ''
                 for msg in self.messages:
-                    match msg.role:
-                        case 'user':
-                            text_need_summary += f"用户：{msg.content}\n"
+                    if msg.task_count <= summary_boundry:
+                        match msg.role:
+                            case 'user':
+                                text_need_summary += f"用户：{msg.content}\n"
 
-                        case 'assistant':
-                            for event in msg.content:
-                                if event.type == 'llm_text':
-                                    text_need_summary += f"llm:{event.llm_text}\n"
-                                elif event.type == 'function_call':
-                                    text_need_summary += f"llm:调用工具{event.tool_call.name}\n"
+                            case 'assistant':
+                                for event in msg.content:
+                                    if event.type == 'llm_text':
+                                        text_need_summary += f"llm:{event.llm_text}\n"
+                                    elif event.type == 'function_call':
+                                        text_need_summary += f"llm:调用工具{event.tool_call.name}\n"
 
-                        case 'tool':
-                            for event in msg.content:
-                                text_need_summary += (f"工具{event.tool_result.name}执行结果："
-                                                      f"{event.tool_result.content}\n")
+                            case 'tool':
+                                for event in msg.content:
+                                    text_need_summary += (f"工具{event.tool_result.name}执行结果："
+                                                          f"{event.tool_result.content}\n")
+
+                    else: saved_messages.append(msg)
 
                 summary_prompt = f"""
 请你对以下的用户与大模型的交互过程进行总结，并在总结时遵循以下规则：
@@ -99,6 +106,8 @@ class Agent:
 {text_need_summary}                
 """
 
+                summary_client = create_llm_client('')
+                summary_result = summary_client.generate(summary_prompt)
 
             except:
 
