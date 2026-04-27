@@ -2,7 +2,8 @@ from .schemas import (
     Provider,
     ToolCall,
     Event,
-    Message,
+    Task,
+    Summary,
     TokenUsage,
     LLMResponse,
     RawResponseLike
@@ -13,7 +14,8 @@ __all__ = [
     'Provider',
     'ToolCall',
     'Event',
-    'Message',
+    'Task',
+    'Summary',
     'TokenUsage',
     'LLMResponse',
     'RawResponseLike'
