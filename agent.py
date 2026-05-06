@@ -1,6 +1,7 @@
 from .schema import Message, Event
 from .LLM import BaseLLMClient,create_llm_client
 from .tools import BaseTool
+from .session import Session
 from typing import Any, Optional, Annotated
 from pathlib import Path
 
@@ -33,7 +34,6 @@ class Agent:
         self.task_type = task_type
         self._should_summary: bool = False
         self.no_summary_limit: Annotated[int, "不参与摘要压缩的任务消息数量"] = 3
-        self.task_count = 0
 
 
     @property
@@ -113,46 +113,38 @@ class Agent:
 
 
 
-
-    def convert_message(
+    # 后续要对是否需要reasoning做适配
+    def convert_tasks_to_events(
             self,
-            messages: list[Message]
+            session: Session
     ) ->  list[Event]:
         """ 转换 messages 为 events """
 
-        if not messages:
-            raise ValueError('messages不能为空')
+        if not session:
+            raise ValueError('session不能为空')
 
-        input_events = []
+        history_tasks = session.tasks
+        current_events = []
 
-        for msg in messages:
-            match msg.role:
-                case 'user':
-                    user_event = Event(
-                        type="user_text",
-                        user_text=msg.content
-                    )
-                    input_events.append(user_event)
+        for task in history_tasks:
+            for event in task.events:
+                if event.type != 'reasoning':
+                    current_events.append(event)
 
-                case 'assistant':
-                    for event in msg.content:
-                        if event.type != "reasoning":
-                            input_events.append(event)
-
-                case "tool":
-                    for event in msg.content:
-                        input_events.append(event)
-
-        return input_events
+        return current_events
 
 
-    async def run(self, messages: list[Message], system_prompt: Optional[str] = None) -> None:
+
+    # 这里需要考虑如何让run函数接收用户的输入
+    async def run(self, session: Session) -> None:
         """ 运行单次任务（用户输入） """
 
-        self.task_count += 1
         step = 0
-        task_events = []
-        input_events = self.convert_message(messages)
+        current_events = []
+
+
+
+        input_events = self.convert_message()
         task_events += input_events
         finish = False
 

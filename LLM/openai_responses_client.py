@@ -1,6 +1,6 @@
 import json
 from .base import BaseLLMClient
-from ..schema import Message, LLMResponse, Event, ToolCall,TokenUsage, RawResponseLike
+from ..schema import Task, LLMResponse, Event, ToolCall,TokenUsage, RawResponseLike
 from ..tools import BaseTool
 from typing import Any, Literal, Optional
 import os

@@ -35,7 +35,6 @@ class Task(BaseModel):
     """ 任务的抽象类型 """
 
     events: list[Event]
-    summary_loc: Optional[Literal['summary_begin', 'in_summary', 'summary_end']] = None
     task_tokens: int = 0
     task_order: int = 0
 
@@ -47,6 +46,7 @@ class Summary(BaseModel):
     summary_start: int = 0     # 被摘要的若干任务的起始顺序，包含
     summary_end: int = 0       # 被摘要的若干任务的结束顺序，包含
     summary_tokens: int = 0
+    original_tokens: int = 0
     summary_order: int = 0
 
 
