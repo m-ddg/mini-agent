@@ -1,9 +1,10 @@
-from .schema import Message, Event
-from .LLM import BaseLLMClient,create_llm_client
+from .schema import Task, Event
+from .LLM import BaseLLMClient, create_llm_client, create_summary_client
 from .tools import BaseTool
 from .session import Session
-from typing import Any, Optional, Annotated
+from typing import Optional, Annotated
 from pathlib import Path
+from .utils import estimate_tokens
 
 
 class Agent:
@@ -13,6 +14,7 @@ class Agent:
             self,
             provider: Optional[str] = None,
             llmclient: Optional[BaseLLMClient] = None,
+            summary_client: Optional[BaseLLMClient] = None,
             max_step: int = 50,
             token_limit: int = 8000,
             system_prompt: Optional[str] = None,
@@ -24,16 +26,16 @@ class Agent:
             raise ValueError("请至少传入provider或llmclient二者中的一个参数以为agent配置LLMClient")
 
         self._client = llmclient or create_llm_client(provider)
+        self._summary_client = summary_client or create_summary_client()
         self.max_step = max_step
-        self.token_limit = token_limit
-        self.messages_limit = 100
         self._system_prompt = self._get_system_prompt(system_prompt)
-        self.messages = []
         self.tools = tools
         self.tool_dict = {tool.name: tool for tool in tools} if tools else {}
         self.task_type = task_type
         self._should_summary: bool = False
-        self.no_summary_limit: Annotated[int, "不参与摘要压缩的任务消息数量"] = 3
+
+        self._hot_soft_ratio = 0.6
+        self._hot_hard_ratio = 0.8
 
 
     @property
@@ -46,7 +48,7 @@ class Agent:
 
 
 
-    def _get_system_prompt(self, system_prompt: Optional[str] = None) -> str:
+    def _create_system_prompt(self, system_prompt: Optional[str] = None) -> str:
         """ 创建系统提示词 """
 
         if system_prompt:
@@ -60,73 +62,74 @@ class Agent:
         return "You are a helpful AI assistant that can use tools."
 
 
-    def build_user_message(self) -> None:
+    def create_user_input_event(self, content: str) -> Event:
         """ 为 messages 添加用户的输入 """
 
-        user_input = input("聊些什么呢？")
-        user_input = user_input.strip()
-        user_message = Message(role='user', content=user_input)
-        self.messages.append(user_message)
+        user_input_event = Event(
+            type = 'user_text',
+            user_text = content
+        )
+
+        return user_input_event
 
 
-    def summary_messages(self) -> None:
-        """ 压缩/摘要函数 """
+#     def summary_messages(self) -> None:
+#         """ 压缩/摘要函数 """
+#
+#         if self._should_summary:
+#             summary_boundry = self.task_count - self.no_summary_limit
+#
+#             saved_messages = []
+#             try:
+#                 text_need_summary = ''
+#                 for msg in self.messages:
+#                     if msg.task_count <= summary_boundry:
+#                         match msg.role:
+#                             case 'user':
+#                                 text_need_summary += f"用户：{msg.content}\n"
+#
+#                             case 'assistant':
+#                                 for event in msg.content:
+#                                     if event.type == 'llm_text':
+#                                         text_need_summary += f"llm:{event.llm_text}\n"
+#                                     elif event.type == 'function_call':
+#                                         text_need_summary += f"llm:调用工具{event.tool_call.name}\n"
+#
+#                             case 'tool':
+#                                 for event in msg.content:
+#                                     text_need_summary += (f"工具{event.tool_result.name}执行结果："
+#                                                           f"{event.tool_result.content}\n")
+#
+#                     else: saved_messages.append(msg)
+#
+#                 summary_prompt = f"""
+# 请你对以下的用户与大模型的交互过程进行总结，并在总结时遵循以下规则：
+# 1. **请不要过度缩略用户的输入**
+# 2. 请主要对llm的输出做总结，总结结果请保留要点
+# 下面是待被总结的交互过程
+# {text_need_summary}
+# """
+#
+#                 summary_client = create_llm_client('')
+#                 summary_result = summary_client.generate(summary_prompt)
+#
+#             except Exception as e:
+#                 print(e)
 
-        if self._should_summary:
-            summary_boundry = self.task_count - self.no_summary_limit
-
-            saved_messages = []
-            try:
-                text_need_summary = ''
-                for msg in self.messages:
-                    if msg.task_count <= summary_boundry:
-                        match msg.role:
-                            case 'user':
-                                text_need_summary += f"用户：{msg.content}\n"
-
-                            case 'assistant':
-                                for event in msg.content:
-                                    if event.type == 'llm_text':
-                                        text_need_summary += f"llm:{event.llm_text}\n"
-                                    elif event.type == 'function_call':
-                                        text_need_summary += f"llm:调用工具{event.tool_call.name}\n"
-
-                            case 'tool':
-                                for event in msg.content:
-                                    text_need_summary += (f"工具{event.tool_result.name}执行结果："
-                                                          f"{event.tool_result.content}\n")
-
-                    else: saved_messages.append(msg)
-
-                summary_prompt = f"""
-请你对以下的用户与大模型的交互过程进行总结，并在总结时遵循以下规则：
-1. **请不要过度缩略用户的输入**
-2. 请主要对llm的输出做总结，总结结果请保留要点
-下面是待被总结的交互过程
-{text_need_summary}                
-"""
-
-                summary_client = create_llm_client('')
-                summary_result = summary_client.generate(summary_prompt)
-
-            except:
 
 
-
-    # 后续要对是否需要reasoning做适配
     def convert_tasks_to_events(
             self,
-            session: Session
+            tasks: list[Task]
     ) ->  list[Event]:
-        """ 转换 messages 为 events """
+        """ 转换 tasks 为 events """
 
-        if not session:
-            raise ValueError('session不能为空')
+        if not tasks:
+            raise ValueError('tasks不能为空')
 
-        history_tasks = session.tasks
         current_events = []
 
-        for task in history_tasks:
+        for task in tasks:
             for event in task.events:
                 if event.type != 'reasoning':
                     current_events.append(event)
@@ -135,17 +138,27 @@ class Agent:
 
 
 
-    # 这里需要考虑如何让run函数接收用户的输入
+    def build_context(self, session: Session, user_input: str) -> list[Event]:
+        """ 创建上下文 """
+
+        # **这里需要先把系统提示词，工具定义，本轮输入转化为字符串用于token计算
+        # system_prompt_tokens = estimate_tokens(self.system_prompt)
+        # tools_tokens = estimate_tokens(self.tools)
+        # input_tokens = estimate_tokens(self.task_type)
+        # remaning_tokens = self._client.context_window
+
+
+    # ↓还需改进
     async def run(self, session: Session) -> None:
         """ 运行单次任务（用户输入） """
 
         step = 0
         current_events = []
 
+        history_tasks = session.tasks
 
+        input_events = self.convert_tasks_to_events(history_tasks)
 
-        input_events = self.convert_message()
-        task_events += input_events
         finish = False
 
         while step < self.max_step:

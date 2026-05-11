@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Any, Literal, Protocol, Optional
-from ..tools import ToolResult
+from .. tools import ToolResult
 from enum import StrEnum
 
 

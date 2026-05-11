@@ -1,14 +1,15 @@
 import json
+import os
 from .base import BaseLLMClient
-from ..schema import Task, LLMResponse, Event, ToolCall,TokenUsage, RawResponseLike
+from ..schema import LLMResponse, Event, ToolCall, TokenUsage, RawResponseLike
 from ..tools import BaseTool
 from typing import Any, Literal, Optional
-import os
 from dotenv import load_dotenv
 from openai import AsyncClient
+from LLMConfigs import OPENAI_MODEL_CONFIGS
+
 
 load_dotenv()
-
 
 class OpenAIResponsesClient(BaseLLMClient):
     """ 处理responses api格式的OpenAI适配客户端 """
@@ -17,23 +18,36 @@ class OpenAIResponsesClient(BaseLLMClient):
             self,
             api_key: str | None = None,
             base_url: str | None = None,
-            model: Literal['gpt-4o', 'gpt-4o-mini'] | None = "gpt-4o"
+            model: Literal['GPT-5.5', 'GPT-5.4', 'GPT-5.4 mini'] | None = "GPT-5.4"
     ):
         api_key = api_key or os.getenv('OPENAI_API_KEY')
         base_url = base_url or os.getenv('OPENAI_API_URL', "https://openai.com/v1")
-        model = model or "gpt-4o"
+        model = model or "GPT-5.4"
         super().__init__(api_key, base_url, model)
         self.client = AsyncClient(
             api_key=api_key,
             base_url=base_url,
         )
+
         self._cached_input_items = []
         self._idx = 0
         self._finish = False
 
 
+
+    @property
+    def context_window(self):
+        """ 返回模型的上下文窗口长度 """
+
+        return OPENAI_MODEL_CONFIGS.get(self.model)["context_window"]
+
+
+
     def _convert_events(self, events: list[Event]) -> tuple[dict[str, Any]]:
         """ 转换events为responses api格式的输入，并且每次都只对新增的events做转换 """
+
+        if self._idx == 0 and self._cached_input_items:
+            self._clear_cache()
 
         new_events = events[self._idx:]
 
@@ -74,10 +88,15 @@ class OpenAIResponsesClient(BaseLLMClient):
         # 返回元组防止意外修改私有属性
         return tuple(self._cached_input_items)
 
+
+
     def _clear_cache(self):
+        """ 格式化 client 与任务相关的属性 """
+
         self._cached_input_items = []
         self._idx = 0
         self._finish = False
+
 
 
     def _convert_tools(self, tools: Optional[BaseTool]) -> Optional[list[dict[str, Any]]]:
@@ -91,6 +110,7 @@ class OpenAIResponsesClient(BaseLLMClient):
             tools_definitions.append(tool.to_openai_responses_format())
 
         return tools_definitions
+
 
 
     def _parse_finish_reason(self, response: RawResponseLike) -> str:
@@ -117,6 +137,7 @@ class OpenAIResponsesClient(BaseLLMClient):
                 else: raise ValueError("返回了不可能的截断原因")
             case "completed":
                 return "响应正常完成"
+
 
 
     def _parse_response(
@@ -170,16 +191,11 @@ class OpenAIResponsesClient(BaseLLMClient):
                     )
                     output_events.append(tc_event)
                     if item.name == "Task Finish":
-                        self.finish = True
+                        self._finish = True
                         break
 
         if self._finish:
             self._clear_cache()
-
-        current_message = Message(
-            role="assistant",
-            content=output_events,
-        )
 
         token_usage = TokenUsage(
             input_tokens=response.usage.input_tokens,
@@ -190,12 +206,14 @@ class OpenAIResponsesClient(BaseLLMClient):
         finish_reason = self._parse_finish_reason(response)
 
         result = LLMResponse(
-            message=current_message,
-            finish_reason=finish_reason,
-            token_usage=token_usage
+            events = output_events,
+            finish_reason = finish_reason,
+            token_usage = token_usage
         )
 
         return result
+
+
 
     async def _make_api_request(
             self,
@@ -211,9 +229,11 @@ class OpenAIResponsesClient(BaseLLMClient):
             "input": input_items,
             "tools": tools
         }
-        response = await self.client.responses.create(**input_params)
+        raw_response = await self.client.responses.create(**input_params)
 
-        return response
+        return raw_response
+
+
 
     async def generate(
             self,
@@ -227,14 +247,14 @@ class OpenAIResponsesClient(BaseLLMClient):
         input_items = list(input_items)
         tools_definitions = self._convert_tools(tools)
 
-        response = await self._make_api_request(
+        raw_response = await self._make_api_request(
             system_prompt = system_prompt,
             input_items = input_items,
             tools = tools_definitions
         )
-        llm_response = self._parse_response(response)
+        response = self._parse_response(raw_response)
 
-        return llm_response
+        return response
 
 
 

@@ -1,7 +1,5 @@
 from ..schema import Task, Summary
-from typing import Optional, Any
-
-
+from typing import Optional
 
 
 class Session:
@@ -19,7 +17,5 @@ class Session:
     def summaries(self):
         return self._summaries
 
-    def get_user_input(self, user_input: Optional[str]):
-        self._user_input = user_input
 
 
