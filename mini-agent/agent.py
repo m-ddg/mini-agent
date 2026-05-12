@@ -138,7 +138,12 @@ class Agent:
 
 
 
-    def build_context(self, session: Session, user_input: str) -> list[Event]:
+    def build_context(
+            self, session: Session,
+            user_input: str,
+            system_prompt: str,
+            tools:
+    ) -> list[Event]:
         """ 创建上下文 """
 
         # **这里需要先把系统提示词，工具定义，本轮输入转化为字符串用于token计算

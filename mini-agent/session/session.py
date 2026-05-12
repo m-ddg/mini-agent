@@ -7,7 +7,8 @@ class Session:
 
     _tasks: Optional[list[Task]] = None
     _summaries: Optional[list[Summary]] = None
-    _user_input: Optional[str] = None
+    # 用于表示未被摘要的 task 的起始位置，_unsummary_task_count + 1 开始就是未被摘要的 task
+    _unsummary_task_count: int = 0
 
     @property
     def tasks(self):
